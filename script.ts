@@ -19,13 +19,15 @@ const s3 = new AWS.S3({
 
 const prefix = uuid.v4() + "_test";
 
+let uploadCounter = 0;
+
 async function main() {
-  
+
   console.log(`Uploading files to bucket ${config.AWS_S3_BUCKET_NAME} with prefix ${prefix}...`)
 
   const filePaths: string[] = [];
 
-  for (let i = 1; i <= 100; i++) {
+  for (let i = 1; i <= 1010; i++) {
     filePaths.push(`files/file${i}.txt`);
   }
 
@@ -41,7 +43,28 @@ async function main() {
 
   await Promise.all(filePaths.map(uploadFile));
 
+  console.log(`Done uploading ${uploadCounter} files.`);
+
   console.timeEnd("upload");
+
+  console.log(`Deleting files...`);
+
+  const deleteResult = await s3.deleteObjects({
+    Bucket: config.AWS_S3_BUCKET_NAME,
+    Delete: {
+      Objects: filePaths.slice(0, 1000).map(filePath => ({ Key: prefix + "/" + filePath }))
+    }
+  }).promise();
+
+  console.log(`S3 deleted ${deleteResult.Deleted.length} files.`);
+
+  const remainingFiles = await s3.listObjectsV2({
+    Bucket: config.AWS_S3_BUCKET_NAME,
+    Prefix: prefix
+  }).promise();
+
+  console.log("Remaining files:");
+  console.log(remainingFiles.Contents.map(c => c.Key).join("\n"));
 }
 
 async function uploadFile(filePath: string): Promise<void> {
@@ -51,7 +74,7 @@ async function uploadFile(filePath: string): Promise<void> {
     Body: fs.createReadStream(filePath)
   };
   await s3.putObject(putObjectRequest).promise();
-  console.log(` - Uploaded ${putObjectRequest.Key}`)
+  process.stdout.write(`Uploaded ${++uploadCounter} files\r`);
 }
 
 async function delay(timeout: number) {
